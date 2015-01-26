@@ -21,6 +21,8 @@ module ActiveRecord
           class_eval "def acting_as() #{name} || build_#{name} end"
           alias_method :acting_as=, "#{name}=".to_sym
 
+          after_initialize :acting_as
+
           include ActsAs::InstanceMethods
         end
 
