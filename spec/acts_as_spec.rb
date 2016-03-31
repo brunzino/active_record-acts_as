@@ -16,6 +16,10 @@ RSpec.describe "ActiveRecord::Base model with #acts_as called" do
     expect(association.options).to have_key(:as)
   end
 
+  it "autobuilds the has_one relation" do
+    expect(subject.new.product).not_to be_nil
+  end
+
   it "has a cattr_reader for the acting_as_model" do
     expect(subject.acting_as_model).to eq Product
   end
@@ -82,6 +86,17 @@ RSpec.describe "ActiveRecord::Base model with #acts_as called" do
     end
   end
 
+  describe "#acting_as_foreign_key" do
+    let(:product_foreign_key_value) do
+      pen.acting_as[pen.acting_as.actable_reflection.foreign_key]
+    end
+    it "return acts_as foreign key value" do
+      pen.save
+      expect(pen.acting_as_foreign_key).to eq(product_foreign_key_value)
+      expect(pen.acting_as_foreign_key).to eq(pen.id)
+    end
+  end
+
   describe "#acting_as=" do
     it "sets acts_as model" do
       product = Product.new(name: 'new product', price: 0.99)
@@ -100,6 +115,47 @@ RSpec.describe "ActiveRecord::Base model with #acts_as called" do
     end
   end
 
+  describe "#has_attribute?" do
+    context "when the attribute is defined on the superclass" do
+      it "queries the superclass" do
+        expect(pen.has_attribute?(:name)).to be_truthy
+      end
+    end
+
+    context "when the attribute is defined on the subclass" do
+      it "queries the subclass" do
+        expect(pen.has_attribute?(:color)).to be_truthy
+      end
+    end
+  end
+
+  describe "#column_for_attribute" do
+    context "when the attribute is defined on the superclass" do
+      it "queries the superclass" do
+        expect(pen.column_for_attribute(:name)).to eq(pen.product.column_for_attribute(:name))
+      end
+    end
+
+    context "when the attribute is defined on the subclass" do
+      it "queries the subclass" do
+        expect(pen.column_for_attribute(:color)).not_to be_nil
+      end
+    end
+  end
+
+  describe ".validators_on" do
+    it "merges the validations on both superclass and subclass" do
+      expect(Pen.validators_on(:name, :price)).to contain_exactly(
+        *Product.validators_on(:name, :price))
+    end
+  end
+
+  describe "._reflections" do
+    it "merges the reflections on both superclass and subclass" do
+      expect(Pen._reflections.length).to eq(Product._reflections.length + 1)
+    end
+  end
+
   it "have supermodel attributes accessible on creation" do
     expect{Pen.create(pen_attributes)}.to_not raise_error
   end
@@ -112,12 +168,59 @@ RSpec.describe "ActiveRecord::Base model with #acts_as called" do
       expect(pen.present).to eq("pen - $0.8")
     end
 
+    it 'responds to serialized attribute' do
+      expect(pen).to respond_to('option1')
+      expect(isolated_pen).to respond_to('option2')
+    end
+
+    it 'responds to supermodel serialized attribute' do
+      expect(pen).to respond_to('global_option')
+      expect(isolated_pen).to respond_to('global_option')
+    end
+
+    it 'does not respond to other models serialized attribute' do
+      expect(pen).to_not respond_to('option2')
+      expect(isolated_pen).to_not respond_to('option1')
+    end
+
+    it 'saves supermodel serialized attribute on save' do
+      pen.option1 = 'value1'
+      pen.global_option = 'globalvalue'
+      pen.save
+      pen.reload
+      isolated_pen.save
+      isolated_pen.reload
+      expect(pen.option1).to eq('value1')
+      expect(isolated_pen).to_not respond_to('option1')
+      expect(JSON.parse(pen.to_json)).to eq(JSON.parse('''
+        {
+          "id": '+ pen.id.to_s + ',
+          "name": "pen",
+          "price": 0.8,
+          "store_id": null,
+          "settings": {"global_option":"globalvalue", "option1":"value1"},
+          "color": "red",
+          "created_at": ' + pen.created_at.to_json + ',
+          "updated_at": ' + pen.updated_at.to_json + '
+        }
+      '''))
+    end
+
     it "saves supermodel attributes on save" do
       pen.save
       pen.reload
       expect(pen.name).to eq('pen')
       expect(pen.price).to eq(0.8)
       expect(pen.color).to eq('red')
+    end
+
+    it "touches supermodel on save" do
+      pen.save
+      pen.reload
+      update = pen.product.updated_at
+      pen.color = "gray"
+      pen.save
+      expect(pen.updated_at).not_to eq(update)
     end
 
     it "raises NoMethodEror on unexisting method call" do
@@ -171,10 +274,22 @@ RSpec.describe "ActiveRecord::Base model with #acts_as called" do
       it "unless the submodel instance association doesn't exist" do
         expect(JSON.parse(isolated_pen.to_json)).to eq(JSON.parse('{"id":null,"color":"red"}'))
       end
+
       it "if the submodel instance association exists" do
         p = Product.new(name: 'Test Pen', price: 0.8, actable: pen)
         p.save
-        expect(JSON.parse(pen.to_json)).to eq(JSON.parse('{"id":' + pen.id.to_s + ',"name":"pen","price":0.8,"store_id":null,"color":"red"}'))
+        expect(JSON.parse(pen.to_json)).to eq(JSON.parse('''
+          {
+            "id": '+ pen.id.to_s + ',
+            "name": "pen",
+            "price": 0.8,
+            "store_id": null,
+            "settings": {},
+            "color": "red",
+            "created_at": ' + pen.created_at.to_json + ',
+            "updated_at": ' + pen.updated_at.to_json + '
+          }
+        '''))
       end
     end
 

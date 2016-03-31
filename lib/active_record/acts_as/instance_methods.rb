@@ -10,10 +10,18 @@ module ActiveRecord
         super || acting_as?(klass)
       end
 
+      def acting_as_foreign_key
+        acting_as[acting_as_reflection.foreign_key]
+      end
+
       # Is the superclass persisted to the database?
       def acting_as_persisted?
         return false if acting_as.nil?
-        !acting_as.id.nil? && !acting_as.actable_id.nil?
+        !acting_as.id.nil? && !acting_as_foreign_key.nil?
+      end
+
+      def touch_actable
+        acting_as.touch
       end
 
       def actable_must_be_valid
@@ -42,7 +50,23 @@ module ActiveRecord
           acting_as.send(:write_attribute, attr_name, value, *args, &block)
         end
       end
-      private :write_attribute
+
+      def read_store_attribute(store_attribute, key)
+        if attribute_method?(store_attribute.to_s)
+          super
+        else
+          acting_as.read_store_attribute(store_attribute, key)
+        end
+      end
+
+      def write_store_attribute(store_attribute, key, value)
+        if attribute_method?(store_attribute.to_s)
+          super
+        else
+          acting_as.send(:write_store_attribute, store_attribute, key, value)
+        end
+      end
+      private :write_attribute, :write_store_attribute
 
       def attributes
         acting_as_persisted? ? acting_as.attributes.except(acting_as_reflection.type, acting_as_reflection.foreign_key).merge(super) : super
@@ -50,6 +74,22 @@ module ActiveRecord
 
       def attribute_names
         acting_as_persisted? ? super | (acting_as.attribute_names - [acting_as_reflection.type, acting_as_reflection.foreign_key]) : super
+      end
+
+      def has_attribute?(attr_name, as_original_class = false)
+        if as_original_class
+          super(attr_name)
+        else
+          super(attr_name) || acting_as.has_attribute?(attr_name)
+        end
+      end
+
+      def column_for_attribute(name)
+        if has_attribute?(name, true)
+          super(name)
+        else
+          acting_as.column_for_attribute(name)
+        end
       end
 
 

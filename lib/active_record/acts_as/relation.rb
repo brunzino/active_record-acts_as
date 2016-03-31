@@ -12,18 +12,23 @@ module ActiveRecord
           cattr_reader(:validates_actable) { options.delete(:validates_actable) == false ? false : true }
 
           reflections = has_one name, scope, options
-          default_scope -> { eager_load(name) }
+          default_scope -> { includes(name) }
           validate :actable_must_be_valid
+          after_update :touch_actable
 
           cattr_reader(:acting_as_reflection) { reflections.stringify_keys[name.to_s] }
           cattr_reader(:acting_as_name) { name.to_s }
           cattr_reader(:acting_as_model) { (options[:class_name] || name.to_s.camelize).constantize }
-          class_eval "def acting_as() #{name} || build_#{name} end"
+          class_eval "def #{name}; super || build_#{name} end"
+          alias_method :acting_as, name
           alias_method :acting_as=, "#{name}=".to_sym
 
           after_initialize :acting_as
 
           include ActsAs::InstanceMethods
+          singleton_class.module_eval do
+            include ActsAs::ClassMethods
+          end
         end
 
         def acting_as?(other = nil)

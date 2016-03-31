@@ -44,6 +44,7 @@ Back to example above, all you have to do is to mark `Product` as `actable` and 
 ```Ruby
 class Product < ActiveRecord::Base
   actable
+  belongs_to :store
 
   validates_presence_of :name, :price
 
@@ -85,8 +86,13 @@ change_table :products do |t|
 end
 ```
 
-Now `Pen` and `Book` *acts as* `Product`, i.e. they inherit `Product`s *attributes*,
-*methods* and *validations*. Now you can do things like these:
+**Make sure** that column names do not match on parent and subclass tables,
+that will make SQL statements ambiguous and invalid!
+Specially **DO NOT** use timestamps on subclasses, if you need them define them
+on parent table and they will be touched after submodel updates.
+
+Now `Pen` and `Book` **acts as** `Product`, i.e. they inherit `Product`s **attributes**,
+**methods** and **validations**. Now you can do things like these:
 
 ```Ruby
 Pen.create name: 'Penie!', price: 0.8, color: 'red'
@@ -169,6 +175,28 @@ Make sure you know what you are doing when overwriting `polymorphic` option.
 Replace `acts_as_superclass` in models with `actable` and if you where using
 `:as_relation_superclass` option on `create_table` remove it and use `t.actable` on column definitions.
 
+
+## RSpec custom matchers
+
+To use this library custom RSpec matchers, you must require the `rspec/acts_as_matchers` file.
+
+Examples:
+
+```Ruby
+require "active_record/acts_as/matchers"
+
+RSpec.describe "Pen acts like a Product" do
+  it { is_expected.to act_as(:product) }
+  it { is_expected.to act_as(Product) }
+
+  it { expect(Person).to act_as(:product) }
+  it { expect(Person).to act_as(Product) }
+end
+
+RSpec.describe "Product is actable" do
+  it { expect(Product).to be_actable }
+end
+```
 
 ## Contributing
 

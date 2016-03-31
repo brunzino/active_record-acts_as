@@ -5,6 +5,7 @@ class Product < ActiveRecord::Base
   actable
   belongs_to :store
   validates_presence_of :name, :price
+  store :settings, accessors: [:global_option]
 
   def present
     "#{name} - $#{price}"
@@ -17,6 +18,7 @@ end
 
 class Pen < ActiveRecord::Base
   acts_as :product
+  store_accessor :settings, :option1
 
   validates_presence_of :color
 end
@@ -24,6 +26,7 @@ end
 class IsolatedPen < ActiveRecord::Base
   self.table_name = :pens
   acts_as :product, validates_actable: false
+  store_accessor :settings, :option2
 
   validates_presence_of :color
 end
@@ -51,29 +54,34 @@ module Inventory
   end
 end
 
-initialize_database do
-  create_table :pens do |t|
-    t.string :color
-  end
+def initialize_schema
+  initialize_database do
+    create_table :pens do |t|
+      t.string :color
+    end
 
-  create_table :products do |t|
-    t.string :name
-    t.float :price
-    t.integer :store_id
-    t.actable
-  end
+    create_table :products do |t|
+      t.string :name
+      t.float :price
+      t.integer :store_id
+      t.text :settings
+      t.timestamps null: true
+      t.actable
+    end
 
-  create_table :stores do |t|
-    t.string :name
-  end
+    create_table :stores do |t|
+      t.string :name
+    end
 
-  create_table :inventory_pen_lids do |t|
-    t.string :color
-  end
+    create_table :inventory_pen_lids do |t|
+      t.string :color
+    end
 
-  create_table :inventory_product_features do |t|
-    t.string :name
-    t.float :price
-    t.actable
+    create_table :inventory_product_features do |t|
+      t.string :name
+      t.float :price
+      t.actable
+    end
   end
 end
+initialize_schema
